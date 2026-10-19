@@ -23,11 +23,15 @@ import {
   Bot,
   SlidersHorizontal,
   Download,
-  KeyRound
+  KeyRound,
+  Smartphone,
+  CheckCircle2
 } from 'lucide-react';
 
 import FormattedMessage from './components/FormattedMessage.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
+import InstallModal from './components/InstallModal.jsx';
+import useInstall from './lib/useInstall.js';
 import { PERSONAS, STARTER_PROMPTS, DEFAULT_MODELS, STORAGE_KEYS } from './lib/constants.js';
 import { generateChat, generateImage, generateSpeech, copyTextToClipboard, friendlyError } from './lib/gemini.js';
 
@@ -88,6 +92,8 @@ export default function App() {
   const [loadingAudioId, setLoadingAudioId] = useState(null);
   const [toast, setToast] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const install = useInstall();
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -362,6 +368,21 @@ export default function App() {
     showToast('Settings save ho gayi!');
   };
 
+  const installPlatform = install.isIos
+    ? 'ios'
+    : /android/i.test(navigator.userAgent || '')
+    ? 'android'
+    : 'desktop';
+
+  const handleInstallClick = async () => {
+    if (install.canInstall) {
+      const res = await install.promptInstall();
+      if (res.accepted) showToast('Install ho gaya! Home screen par Gimmi AI dekhein.');
+      return;
+    }
+    setShowInstallHelp(true);
+  };
+
   const effectiveDark = darkMode;
 
   return (
@@ -385,6 +406,15 @@ export default function App() {
           initial={{ apiKey, models, voice }}
           onSave={saveSettings}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {/* Install help (iOS Safari / desktop) */}
+      {showInstallHelp && (
+        <InstallModal
+          darkMode={effectiveDark}
+          platform={installPlatform}
+          onClose={() => setShowInstallHelp(false)}
         />
       )}
 
@@ -480,6 +510,25 @@ export default function App() {
             effectiveDark ? 'border-slate-800 bg-slate-900/40' : 'border-slate-200 bg-slate-200/40'
           }`}
         >
+          <button
+            onClick={handleInstallClick}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-colors ${
+              effectiveDark ? 'hover:bg-slate-800 text-slate-300' : 'hover:bg-slate-200 text-slate-700'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-indigo-400" />
+              <span>Install App</span>
+            </span>
+            <span
+              className={`text-[11px] px-2 py-0.5 rounded-full ${
+                install.installed ? 'bg-emerald-500/20 text-emerald-400' : 'bg-indigo-500/20 text-indigo-400'
+              }`}
+            >
+              {install.installed ? 'Installed' : install.canInstall ? 'Ready' : 'How to'}
+            </span>
+          </button>
+
           <button
             onClick={() => setSettingsOpen(true)}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-colors ${
@@ -597,6 +646,18 @@ export default function App() {
               )}
             </div>
 
+            {!install.installed && (
+              <button
+                onClick={handleInstallClick}
+                aria-label="Install Gimmi AI app"
+                title="Install app"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:opacity-95 transition-opacity shadow-sm"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">Install</span>
+              </button>
+            )}
+
             <button
               onClick={createNewChat}
               aria-label="New chat"
@@ -606,6 +667,30 @@ export default function App() {
             </button>
           </div>
         </header>
+
+        {/* Install banner - shown when the browser offers a one-tap install */}
+        {install.canInstall && !install.installed && (
+          <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-xs sm:text-sm text-emerald-300">
+            <span className="flex items-center gap-2">
+              <Smartphone className="w-4 h-4 shrink-0" />
+              Gimmi AI ko phone par app ki tarah install karein.
+            </span>
+            <button
+              onClick={handleInstallClick}
+              className="shrink-0 px-3 py-1.5 rounded-xl bg-emerald-500 text-slate-900 font-semibold hover:opacity-95"
+            >
+              Install
+            </button>
+          </div>
+        )}
+
+        {/* Installed confirmation */}
+        {install.installed && (
+          <div className="mx-4 mt-3 flex items-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-2 text-xs text-emerald-400">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            App install ho chuka hai - aap ise home screen se khol sakte hain.
+          </div>
+        )}
 
         {/* Missing-key banner */}
         {!apiKey && (

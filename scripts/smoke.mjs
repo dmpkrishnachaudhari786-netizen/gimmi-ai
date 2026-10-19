@@ -137,6 +137,84 @@ try {
   await new Promise((r) => setTimeout(r, 300));
   const personaOpen = await desktop.evaluate(() => /choose ai style/i.test(document.body.innerText));
   check('Persona menu opens', personaOpen);
+
+  /* ---------- PWA / installability ---------- */
+  const mf = JSON.parse(fs.readFileSync(path.join(root, 'manifest.webmanifest'), 'utf8'));
+  check('Manifest: name/short_name/start_url/display=standalone',
+    !!(mf.name && mf.short_name && mf.start_url && mf.display === 'standalone'));
+  check('Manifest: 192 and 512 icons present',
+    mf.icons.some((i) => i.sizes === '192x192') && mf.icons.some((i) => i.sizes === '512x512'));
+  check('Manifest: maskable icon present', mf.icons.some((i) => /maskable/.test(i.purpose || '')));
+  check('Manifest: scope + theme/background colours set',
+    !!mf.scope && !!mf.theme_color && !!mf.background_color);
+  check('Icon files exist on disk',
+    ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png'].every((f) => fs.existsSync(path.join(root, f))));
+
+  const pwa = await browser.newPage();
+  await pwa.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  pwa.on('pageerror', (e) => errors.push('PWA: ' + e));
+  await pwa.goto(`http://localhost:${PORT}/`, { waitUntil: 'networkidle0' });
+
+  const swOk = await pwa.evaluate(async () => {
+    if (!('serviceWorker' in navigator)) return 'unsupported';
+    try {
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((res) => setTimeout(() => res(null), 8000))
+      ]);
+      return !!(reg && (reg.active || reg.installing || reg.waiting));
+    } catch {
+      return false;
+    }
+  });
+  check('Service worker registers and activates', swOk === true);
+
+  // Offline: with the SW active, the installed app must still open.
+  await pwa.reload({ waitUntil: 'networkidle0' });
+  await pwa.setOfflineMode(true);
+  await pwa.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+  await new Promise((r) => setTimeout(r, 900));
+  const offlineOk = await pwa.evaluate(() => /Namaste, Dost!/.test(document.body.innerText));
+  check('App opens offline from the cached shell', offlineOk);
+  await pwa.setOfflineMode(false);
+
+  // Simulate the browser offering a one-tap install, then use our button.
+  await pwa.evaluate(() => {
+    const e = new Event('beforeinstallprompt');
+    e.prompt = () => { window.__prompted = true; };
+    e.userChoice = Promise.resolve({ outcome: 'accepted' });
+    window.dispatchEvent(e);
+  });
+  await new Promise((r) => setTimeout(r, 350));
+  check('Install banner appears when installable',
+    await pwa.evaluate(() => /app ki tarah install karein/i.test(document.body.innerText)));
+  await pwa.screenshot({ path: 'screenshots/install-banner.png' });
+
+  await pwa.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(
+      (x) => x.getAttribute('aria-label') === 'Install Gimmi AI app');
+    b && b.click();
+  });
+  await new Promise((r) => setTimeout(r, 300));
+  check('Install button triggers the native install prompt',
+    await pwa.evaluate(() => window.__prompted === true));
+
+  // iOS Safari has no native prompt -> show manual instructions.
+  const ios = await browser.newPage();
+  await ios.setUserAgent(
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+  );
+  await ios.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  await ios.goto(`http://localhost:${PORT}/`, { waitUntil: 'networkidle0' });
+  await ios.evaluate(() => {
+    const b = [...document.querySelectorAll('button')].find(
+      (x) => x.getAttribute('aria-label') === 'Install Gimmi AI app');
+    b && b.click();
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  check('iOS shows "Add to Home Screen" instructions',
+    await ios.evaluate(() => /add to home screen/i.test(document.body.innerText)));
+  await ios.screenshot({ path: 'screenshots/install-ios.png' });
 } catch (e) {
   errors.push('SCRIPT: ' + e.message);
 } finally {
