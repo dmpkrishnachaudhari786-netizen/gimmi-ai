@@ -2,12 +2,22 @@
   "name": "Gimmi AI - Smart Hinglish Assistant",
   "short_name": "Gimmi AI",
   "description": "A warm, smart assistant that speaks Hinglish, Hindi and English. Chat, generate images, search live and listen to replies.",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait",
+  "lang": "hi-IN",
+  "dir": "ltr",
   "background_color": "#0e1117",
   "theme_color": "#0e1117",
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
   "icons": [
     {
       "src": "./icon-192.png",
