@@ -1,0 +1,20 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
+// Register the service worker so the app installs on the phone and opens
+// instantly even on a slow network. Fails silently where unsupported.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+      /* offline caching is a bonus, never a blocker */
+    });
+  });
+}
